@@ -1,0 +1,428 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  LAWYER
+  ASSISTANT
+}
+
+enum CaseStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  CLOSED
+  ARCHIVED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum CaseType {
+  CIVIL
+  CRIMINAL
+  COMMERCIAL
+  FAMILY
+  LABOR
+  ADMINISTRATIVE
+  REAL_ESTATE
+  OTHER
+}
+
+enum HearingStatus {
+  SCHEDULED
+  COMPLETED
+  POSTPONED
+  CANCELLED
+}
+
+enum HearingType {
+  FIRST_HEARING
+  PROCEDURAL
+  PLEADING
+  DELIBERATION
+  JUDGMENT
+  CONCILIATION
+  EXPERTISE
+  OTHER
+}
+
+enum DocumentType {
+  IDENTITY
+  CONTRACT
+  COURT_DOCUMENT
+  EVIDENCE
+  INVOICE
+  OTHER
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum NotificationType {
+  HEARING_REMINDER
+  CONTRACT_EXPIRING
+  INVOICE_DUE
+  INVOICE_OVERDUE
+  CASE_UPDATED
+  DOCUMENT_UPLOADED
+}
+
+enum EntityType {
+  USER
+  CLIENT
+  CASE
+  HEARING
+  DOCUMENT
+  CONTRACT
+  INVOICE
+  SETTINGS
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  role         Role     @default(LAWYER)
+  avatar       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clients             Client[]             @relation("ClientLawyer")
+  cases               Case[]               @relation("CaseLawyer")
+  caseAssignments     CaseAssignment[]
+  uploadedDocuments   Document[]           @relation("DocumentUploader")
+  createdInvoices     Invoice[]            @relation("InvoiceCreator")
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+  sessions            UserSession[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([role])
+}
+
+model UserSession {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Core domain
+// ---------------------------------------------------------------------------
+
+model Client {
+  id         String    @id @default(uuid())
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  address    String?
+  nationalId String?   @unique
+  notes      String?
+  lawyerId   String?
+  isArchived Boolean   @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  lawyer    User?      @relation("ClientLawyer", fields: [lawyerId], references: [id], onDelete: SetNull)
+  cases     Case[]
+  documents Document[]
+  contracts Contract[]
+  invoices  Invoice[]
+
+  @@index([lawyerId])
+  @@index([lastName, firstName])
+  @@index([email])
+  @@index([phone])
+  @@index([isArchived])
+}
+
+model Case {
+  id              String       @id @default(uuid())
+  referenceNumber String       @unique
+  title           String
+  description     String?
+  caseType        CaseType     @default(CIVIL)
+  status          CaseStatus   @default(OPEN)
+  priority        CasePriority @default(MEDIUM)
+  clientId        String
+  lawyerId        String
+  court           String?
+  judge           String?
+  opposingParty   String?
+  openingDate     DateTime     @default(now())
+  closingDate     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  client      Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  lawyer      User             @relation("CaseLawyer", fields: [lawyerId], references: [id], onDelete: Restrict)
+  assignments CaseAssignment[]
+  hearings    Hearing[]
+  documents   Document[]
+  contracts   Contract[]
+  invoices    Invoice[]
+
+  @@index([clientId])
+  @@index([lawyerId])
+  @@index([status])
+  @@index([priority])
+  @@index([caseType])
+  @@index([court])
+}
+
+/// Users (assistants or collaborating lawyers) assigned to a case.
+model CaseAssignment {
+  caseId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, userId])
+  @@index([userId])
+}
+
+model Hearing {
+  id           String        @id @default(uuid())
+  caseId       String
+  /// Exact instant of the hearing (date + time).
+  date         DateTime
+  /// Wall-clock time as entered by the user (HH:mm), used for display.
+  time         String
+  location     String?
+  court        String?
+  type         HearingType   @default(OTHER)
+  notes        String?
+  status       HearingStatus @default(SCHEDULED)
+  /// True once the final (same-day) reminder has been dispatched.
+  reminderSent Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([date])
+  @@index([status, date])
+}
+
+model Document {
+  id         String       @id @default(uuid())
+  caseId     String?
+  clientId   String?
+  name       String
+  type       DocumentType @default(OTHER)
+  /// Storage key resolved by the storage provider (never a public URL).
+  fileUrl    String
+  mimeType   String
+  size       Int
+  uploadedBy String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  case      Case?      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  uploader  User?      @relation("DocumentUploader", fields: [uploadedBy], references: [id], onDelete: SetNull)
+  contracts Contract[]
+
+  @@index([caseId])
+  @@index([clientId])
+  @@index([type])
+}
+
+model Contract {
+  id          String         @id @default(uuid())
+  clientId    String
+  caseId      String?
+  documentId  String?
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  status      ContractStatus @default(ACTIVE)
+  /// Contract value (fees agreement), optional.
+  value       Decimal?       @db.Decimal(12, 2)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  case     Case?     @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([caseId])
+  @@index([status, endDate])
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  clientId      String
+  caseId        String?
+  createdById   String?
+  /// Subtotal before tax.
+  amount        Decimal       @db.Decimal(12, 2)
+  /// Tax rate in percent (e.g. 20 for 20%).
+  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
+  /// Tax amount.
+  tax           Decimal       @db.Decimal(12, 2)
+  total         Decimal       @db.Decimal(12, 2)
+  amountPaid    Decimal       @default(0) @db.Decimal(12, 2)
+  status        InvoiceStatus @default(DRAFT)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  client    Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  case      Case?         @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdBy User?         @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  items     InvoiceItem[]
+
+  @@index([clientId])
+  @@index([caseId])
+  @@index([status, dueDate])
+  @@index([issueDate])
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  total       Decimal @db.Decimal(12, 2)
+  /// Line order on the invoice (0-based).
+  position    Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, position])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications, audit & settings
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id              String           @id @default(uuid())
+  userId          String
+  type            NotificationType
+  title           String
+  message         String
+  isRead          Boolean          @default(false)
+  relatedEntity   EntityType?
+  relatedEntityId String?
+  /// Structured parameters so clients can render a localised message.
+  data            Json?
+  /// Unique key preventing duplicate automatic notifications (e.g. reminders).
+  dedupeKey       String?          @unique
+  createdAt       DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+model ActivityLog {
+  id        String     @id @default(uuid())
+  userId    String?
+  action    String
+  entity    EntityType
+  entityId  String
+  /// Denormalised links used to build case and client timelines.
+  caseId    String?
+  clientId  String?
+  metadata  Json?
+  createdAt DateTime   @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([caseId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model SystemSettings {
+  id                        String   @id @default("default")
+  firmName                  String   @default("Cabinet")
+  firmEmail                 String?
+  firmPhone                 String?
+  firmAddress               String?
+  taxIdentifier             String?
+  currency                  String   @default("MAD")
+  defaultTaxRate            Decimal  @default(20) @db.Decimal(5, 2)
+  invoiceDueDays            Int      @default(30)
+  contractExpiryWarningDays Int      @default(30)
+  invoiceDueWarningDays     Int      @default(3)
+  updatedAt                 DateTime @updatedAt
+}

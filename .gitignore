@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Secrets (only the *.example templates are committed)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+*.pem
+*.key
+
+# Build output
+dist/
+build/
+.next/
+.swc/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Deployment tooling
+.vercel/
+
+# Uploaded files (stored on disk or S3, never in git)
+uploads/
+
+# Local PostgreSQL data and database dumps (migrations in prisma/migrations stay tracked)
+pgdata/
+postgres-data/
+*.dump
+*.backup
+*.sql.gz
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files (macOS, Windows, Linux)
+.DS_Store
+._*
+.AppleDouble
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*~
+.directory
+.Trash-*
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

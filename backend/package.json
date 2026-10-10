@@ -1,0 +1,73 @@
+{
+  "name": "legal-management-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REST API for the Legal Management Platform",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "start:prod": "prisma migrate deploy && node dist/server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force",
+    "job:reminders": "node dist/jobs/run-reminders.js",
+    "job:reminders:dev": "tsx src/jobs/run-reminders.ts",
+    "admin:create": "node dist/jobs/create-admin.js",
+    "admin:create:dev": "tsx src/jobs/create-admin.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1148.0",
+    "@prisma/client": "6.19.3",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^7.0.10",
+    "prisma": "6.19.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^22.15.0",
+    "@types/nodemailer": "^7.0.3",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.39.5",
+    "globals": "^16.0.0",
+    "jest": "^30.5.2",
+    "prettier": "^3.6.2",
+    "supertest": "^7.3.1",
+    "ts-jest": "^29.4.14",
+    "tsx": "^4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}
