@@ -40,7 +40,7 @@ export default async function LandingPage() {
       </header>
 
       <main id="main" className="flex-1">
-        <section className="bg-navy relative overflow-hidden pb-24 text-white">
+        <section className="bg-navy relative overflow-hidden pb-14 text-white">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,oklch(0.74_0.12_80/0.18),transparent_45%)]"
@@ -81,7 +81,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section className="mx-auto -mt-12 max-w-6xl px-4 pb-20 sm:px-6">
+        <section className="mx-auto max-w-6xl px-4 pt-12 pb-20 sm:px-6">
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map(({ key, icon: Icon }) => (
               <li key={key} className="bg-card rounded-xl border p-6 shadow-sm">
