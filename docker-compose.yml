@@ -1,0 +1,84 @@
+# Local full stack: PostgreSQL + API + web app.
+#   cp .env.docker.example .env      # then fill in the secrets
+#   docker compose up -d --build
+#   docker compose --profile seed run --rm seed   # optional demo data
+name: legal-management
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-legal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-legal_management}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - '${POSTGRES_PORT:-5440}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-legal}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-legal_management}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env}
+      APP_URL: http://localhost:${WEB_PORT:-3000}
+      CORS_ORIGIN: http://localhost:${WEB_PORT:-3000}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Africa/Casablanca}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      UPLOAD_PROVIDER: local
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      ENABLE_IN_PROCESS_SCHEDULER: 'true'
+      REMINDER_CRON: ${REMINDER_CRON:-0 * * * *}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - '${API_PORT:-5000}:5000'
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-5000}
+        NEXT_PUBLIC_APP_TIMEZONE: ${APP_TIMEZONE:-Africa/Casablanca}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+  # Development/demo data only: docker compose --profile seed run --rm seed
+  seed:
+    profiles: ['seed']
+    build:
+      context: ./backend
+      target: build
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-legal}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-legal_management}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Africa/Casablanca}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+    command: ['npx', 'prisma', 'db', 'seed']
+
+volumes:
+  pgdata:
+  uploads:
