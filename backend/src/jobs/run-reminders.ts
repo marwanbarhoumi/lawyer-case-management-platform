@@ -1,6 +1,6 @@
 /**
  * Standalone entry point for scheduled reminders.
- * Render Cron Job command: `npm run job:reminders` (after `npm run build`).
+ * Scheduler command (GitHub Actions `reminders.yml`): `npm run job:reminders` (after `npm run build`).
  */
 import { prisma } from '../config/prisma';
 import { runReminderJob } from '../services/reminder.service';

@@ -5,7 +5,7 @@ import { runReminderJob } from '../services/reminder.service';
 
 /**
  * Optional in-process scheduler (Docker / single instance). Reminders are idempotent
- * thanks to notification dedupe keys, so running it alongside the Render Cron Job
+ * thanks to notification dedupe keys, so running it alongside the scheduled job
  * or on several instances never produces duplicates.
  */
 export function startScheduler(): ScheduledTask | null {

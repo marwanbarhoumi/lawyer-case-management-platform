@@ -228,7 +228,7 @@ export interface ReminderJobResult {
   durationMs: number;
 }
 
-/** Entry point used by the in-process scheduler, the Render Cron Job and the admin trigger. */
+/** Entry point used by the in-process scheduler, the scheduled job and the admin trigger. */
 export async function runReminderJob(now = new Date()): Promise<ReminderJobResult> {
   const started = Date.now();
   const settings = await getSettings();

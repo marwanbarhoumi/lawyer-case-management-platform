@@ -3,12 +3,29 @@ import createNextIntlPlugin from 'next-intl/plugin';
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
-const apiUrl =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:5000');
+/**
+ * Two ways to reach the API:
+ * - API_PROXY_TARGET (recommended on Vercel): the browser calls `/api/*` on the app's own origin and
+ *   Next/Vercel proxies it to the backend, so the refresh cookie is first-party.
+ * - NEXT_PUBLIC_API_URL: the browser calls the API origin directly (CORS + cross-site cookie).
+ */
+const proxyTarget = process.env.API_PROXY_TARGET?.trim().replace(/\/$/, '') || undefined;
 
-if (!apiUrl) {
-  throw new Error('NEXT_PUBLIC_API_URL must be set for production builds (URL of the API).');
+if (proxyTarget && !/^https?:\/\/[^/]+$/.test(proxyTarget)) {
+  throw new Error(
+    'API_PROXY_TARGET must be an origin such as https://my-api.onrender.com (no path).',
+  );
+}
+
+const apiUrl = proxyTarget
+  ? ''
+  : (process.env.NEXT_PUBLIC_API_URL ??
+    (process.env.NODE_ENV === 'production' ? undefined : 'http://localhost:5000'));
+
+if (apiUrl === undefined) {
+  throw new Error(
+    'Set API_PROXY_TARGET (same-origin proxy) or NEXT_PUBLIC_API_URL for production builds.',
+  );
 }
 
 const securityHeaders = [
@@ -25,7 +42,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
-      `connect-src 'self' ${apiUrl}`,
+      `connect-src 'self'${apiUrl ? ` ${apiUrl}` : ''}`,
       "frame-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
@@ -39,8 +56,20 @@ const nextConfig: NextConfig = {
   output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   poweredByHeader: false,
   reactStrictMode: true,
+  env: { NEXT_PUBLIC_API_URL: apiUrl },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    const routes = [{ source: '/:path*', headers: securityHeaders }];
+    if (proxyTarget) {
+      // Per-user API responses must never be cached by the Vercel CDN.
+      routes.push({
+        source: '/api/:path*',
+        headers: [{ key: 'x-vercel-enable-rewrite-caching', value: '0' }],
+      });
+    }
+    return routes;
+  },
+  async rewrites() {
+    return proxyTarget ? [{ source: '/api/:path*', destination: `${proxyTarget}/api/:path*` }] : [];
   },
 };
 

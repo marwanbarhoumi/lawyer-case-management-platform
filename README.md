@@ -41,7 +41,7 @@ hearing and on the day itself**, without duplicates. The interface is available 
 | Backend  | Node.js 22, Express 5, TypeScript (strict), Prisma 6, Zod 4, JWT (access + rotating refresh), bcryptjs, multer, node-cron, nodemailer, AWS SDK v3 (S3/R2) |
 | Database | PostgreSQL 16                                                                                              |
 | Tests    | Jest + Supertest (API, against a real PostgreSQL), Jest + React Testing Library, Playwright (E2E)          |
-| Ops      | Docker / docker-compose, GitHub Actions, Vercel (frontend), Render (API, PostgreSQL, cron job)              |
+| Ops      | Docker / docker-compose, GitHub Actions (CI + scheduled reminders), Vercel (frontend + `/api` proxy), Render (API), Neon (PostgreSQL) |
 
 ## Architecture
 
@@ -50,13 +50,13 @@ flowchart LR
   B[Browser<br/>Next.js app] -- "REST + Bearer token<br/>httpOnly refresh cookie" --> API[Express API]
   API -- Prisma --> DB[(PostgreSQL)]
   API -- files --> FS[(Local disk / S3 / R2)]
-  CRON[Reminder job<br/>Render Cron / node-cron] --> DB
+  CRON[Reminder job<br/>GitHub Actions schedule / node-cron] --> DB
 ```
 
 - Full description, auth sequence and reminder flow: [docs/architecture.md](docs/architecture.md)
 - Data model and ER diagram: [docs/database.md](docs/database.md)
 - REST endpoints: [docs/api.md](docs/api.md)
-- Vercel / Render / Docker: [docs/deployment.md](docs/deployment.md)
+- Zero-cost deployment (Vercel / Render / Neon) and Docker: [docs/deployment.md](docs/deployment.md)
 
 ```
 .
@@ -64,8 +64,8 @@ flowchart LR
 ├── frontend/           Next.js app (app/, components/, messages/, __tests__/, e2e/)
 ├── docs/               Architecture, database, API, deployment
 ├── docker-compose.yml  PostgreSQL + API + web
-├── render.yaml         Render Blueprint (API, cron, database)
-└── .github/workflows/  CI
+├── render.yaml         Render Free web service (reference; create the service manually)
+└── .github/workflows/  CI and scheduled hearing reminders
 ```
 
 ## Getting started (local development)
@@ -148,12 +148,13 @@ Templates: [`backend/.env.example`](backend/.env.example), [`frontend/.env.examp
 | `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `UPLOAD_API_KEY`, `UPLOAD_API_SECRET` | backend | S3-compatible storage |
 | `ENABLE_IN_PROCESS_SCHEDULER`, `REMINDER_CRON` | backend | Run reminders inside the API (instead of a cron job)              |
 | `SMTP_*`                                  | backend  | Optional e-mail delivery (password reset)                                |
-| `NEXT_PUBLIC_API_URL`                     | frontend | API base URL (build time)                                                |
+| `API_PROXY_TARGET`                        | frontend | API origin proxied as same-origin `/api` (build time; deployment on Vercel) |
+| `NEXT_PUBLIC_API_URL`                     | frontend | Direct API base URL (build time; local dev, Docker) — ignored when `API_PROXY_TARGET` is set |
 | `NEXT_PUBLIC_APP_TIMEZONE`                | frontend | Same value as `APP_TIMEZONE`                                             |
 | `NEXT_PUBLIC_MAX_UPLOAD_MB`               | frontend | Client-side upload size check (same value as `MAX_UPLOAD_MB`)            |
 
 Production fails fast when `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `APP_URL` or `CORS_ORIGIN` (API) or
-`NEXT_PUBLIC_API_URL` (frontend build) is missing. Documents need S3 in production (`UPLOAD_PROVIDER=s3`); see
+both `API_PROXY_TARGET` and `NEXT_PUBLIC_API_URL` (frontend build) are missing. Documents need S3 in production (`UPLOAD_PROVIDER=s3`); see
 [docs/deployment.md](docs/deployment.md) for S3, SMTP, PostgreSQL and the first admin account.
 
 ## Scripts
@@ -201,17 +202,19 @@ push and pull request, then the Playwright suite against a freshly migrated and 
 
 ## Deployment
 
-Local → GitHub → Vercel → Render → PostgreSQL → custom domain → production verification.
+Zero-cost demo, no domain and no payment card required:
 
-- **Frontend → Vercel**: root directory `frontend`, build `npm run build`, env `NEXT_PUBLIC_API_URL`,
-  `NEXT_PUBLIC_APP_TIMEZONE`, `NEXT_PUBLIC_MAX_UPLOAD_MB`.
-- **Backend → Render** via [`render.yaml`](render.yaml): web service (`/health` check, `prisma migrate deploy` on
-  start), hourly cron job `npm run job:reminders`, PostgreSQL.
-- Documents in an S3-compatible bucket (Cloudflare R2 recommended); Render disks are ephemeral.
-- Production is never seeded: create the first admin with `npm run admin:create`.
-- Custom domains `app.yourdomain.com` (Vercel) and `api.yourdomain.com` (Render) keep the refresh cookie first-party.
+- **Frontend → Vercel Hobby**: root directory `frontend`, env `API_PROXY_TARGET=https://<service>.onrender.com`,
+  `NEXT_PUBLIC_APP_TIMEZONE`, `NEXT_PUBLIC_MAX_UPLOAD_MB`. `/api/*` is proxied to Render, so the refresh cookie is
+  first-party on the `vercel.app` domain.
+- **API → Render Free web service** (created manually; `/health` check, `prisma migrate deploy` on start).
+- **Database → Neon Free** (direct connection string, without `channel_binding`).
+- **Documents → private S3-compatible bucket** (Backblaze B2 without card; Cloudflare R2 requires a payment method).
+- **Reminders → GitHub Actions** ([`reminders.yml`](.github/workflows/reminders.yml), hourly, secret `DATABASE_URL`).
+- Migrations and the first admin (`npm run admin:create`) or synthetic demo data are applied once from your PC — no
+  Render Shell needed.
 
-Step-by-step guide, DNS records, verification and checklist: [docs/deployment.md](docs/deployment.md).
+Step-by-step guide, environment variables, verification and troubleshooting: [docs/deployment.md](docs/deployment.md).
 
 ## Security
 
@@ -233,7 +236,8 @@ Step-by-step guide, DNS records, verification and checklist: [docs/deployment.md
 | Prisma pinned to 6.x             | Prisma 7 changes configuration and client generation; 6.19 is stable and well supported                   |
 | Locale in a cookie, no `/fr` `/ar` URL prefix | Simpler routing for an authenticated back-office app; `lang`/`dir` set on `<html>`             |
 | Invoice PDF via the print page   | The printable invoice uses print CSS ("Save as PDF") instead of a server-side PDF engine (no headless Chrome on the API) |
-| Reminders as an idempotent job   | Works with Render Cron, node-cron or a manual trigger; unique `dedupeKey` prevents duplicates              |
+| Reminders as an idempotent job   | Works with a GitHub Actions schedule, node-cron or a manual trigger; unique `dedupeKey` prevents duplicates |
+| Same-origin `/api` proxy on Vercel | First-party refresh cookie on free `*.vercel.app` / `*.onrender.com` domains, no custom domain needed     |
 | Files outside PostgreSQL         | Only metadata in the database; content on disk (dev/Docker) or S3/R2 (production)                         |
 
 ## Limitations
@@ -241,8 +245,8 @@ Step-by-step guide, DNS records, verification and checklist: [docs/deployment.md
 - E-mail notifications are limited to password resets; hearing reminders are in-app only (an SMTP/SMS channel can be
   plugged into the notification service).
 - No real-time push: the notification badge polls every 60 seconds.
-- With the default `vercel.app` / `onrender.com` domains, Safari blocks the cross-site refresh cookie; use custom
-  domains on the same site in production (see [docs/deployment.md](docs/deployment.md#cookies-and-cors)).
+- Free demo hosting: the Render API sleeps after 15 idle minutes (first request ~1 minute), rate limits are shared by
+  visitors behind the Vercel proxy, and scheduled reminders can be delayed by GitHub.
 - Invoices are exported as PDF through the browser print dialog, not generated server-side.
 - Single firm (single tenant) per deployment.
 

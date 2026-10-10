@@ -27,6 +27,11 @@ export class S3StorageProvider implements StorageProvider {
       region: options.region,
       endpoint: options.endpoint || undefined,
       forcePathStyle: Boolean(options.endpoint),
+      // S3-compatible services do not all accept the SDK's default CRC32 checksum headers.
+      ...(options.endpoint && {
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
+      }),
       credentials: {
         accessKeyId: options.accessKeyId,
         secretAccessKey: options.secretAccessKey,

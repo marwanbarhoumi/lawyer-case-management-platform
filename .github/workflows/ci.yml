@@ -91,7 +91,8 @@ jobs:
       APP_URL: http://localhost:3000
       CORS_ORIGIN: http://localhost:3000
       APP_TIMEZONE: Africa/Casablanca
-      NEXT_PUBLIC_API_URL: http://localhost:5000
+      # Same-origin /api proxy, as deployed on Vercel.
+      API_PROXY_TARGET: http://localhost:5000
       NEXT_PUBLIC_APP_TIMEZONE: Africa/Casablanca
       NEXT_TELEMETRY_DISABLED: '1'
       E2E_API_URL: http://localhost:5000

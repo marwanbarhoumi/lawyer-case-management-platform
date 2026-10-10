@@ -1,0 +1,60 @@
+name: Hearing reminders
+
+# Runs the idempotent reminder job (7/3/1 days before and on the day of each hearing) directly against
+# the production database. Free alternative to a Render Cron Job; it does not deploy anything.
+# Requires the repository secret DATABASE_URL (Neon direct connection string). Optional variable APP_TIMEZONE.
+on:
+  schedule:
+    - cron: '17 * * * *' # hourly; GitHub may delay scheduled runs, the job catches up on the next run
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hearing-reminders
+  cancel-in-progress: false
+
+jobs:
+  reminders:
+    name: Send hearing reminders
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: production
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      APP_TIMEZONE: ${{ vars.APP_TIMEZONE || 'Africa/Tunis' }}
+    steps:
+      - name: Check configuration
+        id: config
+        working-directory: .
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::Repository secret DATABASE_URL is not set; skipping the reminder job."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.enabled == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.config.outputs.enabled == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Build
+        if: steps.config.outputs.enabled == 'true'
+        run: |
+          npm ci
+          npm run build
+      - name: Run reminder job
+        if: steps.config.outputs.enabled == 'true'
+        run: |
+          # The job never signs tokens, but the shared configuration requires JWT secrets: use throwaway values.
+          export JWT_SECRET="$(openssl rand -hex 48)"
+          export JWT_REFRESH_SECRET="$(openssl rand -hex 48)"
+          npm run job:reminders

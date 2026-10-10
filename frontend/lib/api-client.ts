@@ -52,7 +52,8 @@ export function onUnauthorized(listener: () => void): () => void {
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  const url = new URL(`${API_URL}${path}`);
+  // An empty API_URL means same-origin (the `/api` proxy); resolve it against the page origin.
+  const url = new URL(`${API_URL}${path}`, globalThis.location?.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value === undefined || value === null || value === '') continue;
     url.searchParams.set(key, Array.isArray(value) ? value.join(',') : String(value));

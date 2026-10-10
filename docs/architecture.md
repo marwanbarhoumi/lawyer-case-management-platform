@@ -4,11 +4,11 @@ The platform is split into two independently deployable applications that talk o
 
 | Layer    | Technology                                                                 | Hosting            |
 | -------- | -------------------------------------------------------------------------- | ------------------ |
-| Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4, next-intl 4 | Vercel             |
-| Backend  | Node.js 22, Express 5, TypeScript, Prisma 6, Zod 4                         | Render web service |
-| Database | PostgreSQL 16                                                              | Render PostgreSQL  |
-| Jobs     | Same backend code, `npm run job:reminders`                                 | Render Cron Job    |
-| Files    | Local disk (development / Docker) or any S3-compatible bucket (production) | Cloudflare R2, S3… |
+| Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4, next-intl 4 | Vercel Hobby (proxies `/api` to the API) |
+| Backend  | Node.js 22, Express 5, TypeScript, Prisma 6, Zod 4                         | Render Free web service |
+| Database | PostgreSQL 16                                                              | Neon Free          |
+| Jobs     | Same backend code, `npm run job:reminders`                                 | GitHub Actions schedule |
+| Files    | Local disk (development / Docker) or any S3-compatible bucket (production) | Backblaze B2, Cloudflare R2, S3… |
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ flowchart LR
 | `services/`   | Business rules, row-level scopes (`access.service.ts`), activity log, notifications, reminders    |
 | `storage/`    | `StorageProvider` interface with `local` and `s3` implementations                                |
 | `middleware/` | JWT authentication, role authorization, rate limiting, upload (multer, type/size checks), errors |
-| `jobs/`       | `run-reminders.ts` (one-shot, for Render Cron) and `scheduler.ts` (optional in-process node-cron)  |
+| `jobs/`       | `run-reminders.ts` (one-shot, for a scheduler such as GitHub Actions) and `scheduler.ts` (optional in-process node-cron)  |
 | `utils/`      | Response helpers, pagination, dates in the firm timezone, invoice maths, sequences, crypto       |
 
 ## Frontend layout (`frontend`)
@@ -110,7 +110,7 @@ The frontend hides links and buttons with `RoleGate` / `hasRole`, purely for UX.
 
 ```mermaid
 flowchart TD
-  T[Render Cron hourly<br/>or in-process node-cron<br/>or admin button] --> J[runReminderJob]
+  T[GitHub Actions hourly<br/>or in-process node-cron<br/>or admin button] --> J[runReminderJob]
   J --> H[Scheduled hearings from today to today+7<br/>with reminderSent = false]
   H --> S{days until hearing<br/>in firm timezone}
   S -- "4..7" --> R7[stage 7d]

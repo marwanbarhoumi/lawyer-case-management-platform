@@ -50,6 +50,11 @@ export function createApp(): Express {
     }
   });
 
+  // Responses are per-user: never let a CDN or proxy in front of the API (e.g. Vercel rewrites) cache them.
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   app.use('/api', apiLimiter, apiRouter());
 
   app.use(notFoundHandler);

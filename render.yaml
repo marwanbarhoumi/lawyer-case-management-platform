@@ -1,50 +1,46 @@
-# Render Blueprint: API + hourly reminder cron job + PostgreSQL.
-# The frontend is deployed separately on Vercel (see docs/deployment.md).
-databases:
-  - name: legal-db
-    databaseName: legal_management
-    user: legal
-    plan: basic-256mb
-    region: frankfurt
-
+# Reference for the zero-cost demo: ONE free web service only (no Render database, no cron job).
+# Create the service manually in the dashboard (docs/deployment.md §4); this file lists the same settings.
+#   Database:   Neon Free PostgreSQL (DATABASE_URL)
+#   Reminders:  GitHub Actions schedule (.github/workflows/reminders.yml)
+#   Frontend:   Vercel Hobby, proxying /api to this service (API_PROXY_TARGET)
+# See docs/deployment.md. Never change `plan` without checking the price.
 services:
   - type: web
-    name: legal-api
+    name: lexora-api
     runtime: node
+    plan: free
     region: frankfurt
-    plan: starter
     rootDir: backend
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: '22'
       - key: DATABASE_URL
-        fromDatabase:
-          name: legal-db
-          property: connectionString
+        sync: false # Neon direct connection string, without channel_binding
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: APP_URL
-        sync: false # e.g. https://legal-management.vercel.app
+        sync: false # https://<project>.vercel.app
       - key: CORS_ORIGIN
-        sync: false # same value as APP_URL (comma-separated if several)
+        sync: false # same value as APP_URL
       - key: APP_TIMEZONE
         value: Africa/Tunis
       - key: ALLOW_REGISTRATION
         value: 'false'
-      # Render's filesystem is ephemeral: store documents in S3-compatible storage (e.g. Cloudflare R2).
+      # Free instances have no persistent disk: documents go to S3-compatible storage.
       - key: UPLOAD_PROVIDER
         value: s3
       - key: S3_BUCKET
         sync: false
       - key: S3_REGION
-        value: auto
+        sync: false # Backblaze B2: region of the endpoint (e.g. eu-central-003); Cloudflare R2: auto
       - key: S3_ENDPOINT
         sync: false
       - key: UPLOAD_API_KEY
@@ -53,77 +49,16 @@ services:
         sync: false
       - key: MAX_UPLOAD_MB
         value: '10'
-      # Reminders run in the dedicated cron job below.
+      # Free instances sleep after 15 idle minutes: reminders run from GitHub Actions instead.
       - key: ENABLE_IN_PROCESS_SCHEDULER
         value: 'false'
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
-        value: '587' # 465 for implicit TLS
+        value: '587'
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
         sync: false
       - key: SMTP_FROM
         sync: false
-
-  - type: cron
-    name: legal-hearing-reminders
-    runtime: node
-    region: frankfurt
-    plan: starter
-    rootDir: backend
-    schedule: '0 * * * *' # hourly; the job is idempotent (no duplicate reminders)
-    buildCommand: npm ci --include=dev && npm run build
-    startCommand: npm run job:reminders
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NODE_VERSION
-        value: '22'
-      - key: DATABASE_URL
-        fromDatabase:
-          name: legal-db
-          property: connectionString
-      - key: JWT_SECRET
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: JWT_SECRET
-      - key: JWT_REFRESH_SECRET
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: JWT_REFRESH_SECRET
-      - key: APP_URL
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: APP_URL
-      - key: APP_TIMEZONE
-        value: Africa/Tunis
-      - key: SMTP_HOST
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: SMTP_HOST
-      - key: SMTP_PORT
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: SMTP_PORT
-      - key: SMTP_USER
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: SMTP_USER
-      - key: SMTP_PASSWORD
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: SMTP_PASSWORD
-      - key: SMTP_FROM
-        fromService:
-          type: web
-          name: legal-api
-          envVarKey: SMTP_FROM
