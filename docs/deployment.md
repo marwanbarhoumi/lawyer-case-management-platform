@@ -36,8 +36,10 @@ cd frontend && npm run test:e2e          # API seeded + web app (see README "Tes
 
 ## 2. GitHub
 
+The repository is [github.com/marwanbarhoumi/lawyer-case-management-platform](https://github.com/marwanbarhoumi/lawyer-case-management-platform)
+(branch `main`). For a fork or a new copy:
+
 ```bash
-git init -b main && git add . && git commit -m "feat: prepare legal management platform for production"
 gh repo create <owner>/<name> --private --source . --push     # or create it on github.com, then:
 git remote add origin https://github.com/<owner>/<name>.git && git push -u origin main
 ```
@@ -65,7 +67,7 @@ push and pull requests and needs no secret.
 | Variable                    | Value                                                                    |
 | --------------------------- | ------------------------------------------------------------------------ |
 | `NEXT_PUBLIC_API_URL`       | API URL without trailing `/`, e.g. `https://api.yourdomain.com` (required) |
-| `NEXT_PUBLIC_APP_TIMEZONE`  | Same as the API `APP_TIMEZONE` (e.g. `Africa/Casablanca`)                 |
+| `NEXT_PUBLIC_APP_TIMEZONE`  | Same as the API `APP_TIMEZONE` (e.g. `Africa/Tunis`)                 |
 | `NEXT_PUBLIC_MAX_UPLOAD_MB` | Same as the API `MAX_UPLOAD_MB` (default 10)                              |
 
 `NEXT_PUBLIC_*` values are inlined at **build time** and `NEXT_PUBLIC_API_URL` is also written into the
@@ -97,7 +99,8 @@ Content-Security-Policy `connect-src`: redeploy the frontend after changing them
 5. Check `https://<service>.onrender.com/health` → `{"status":"ok"}` and `/health/ready` → database `ok`.
 
 The API refuses to start with an invalid configuration (missing `DATABASE_URL`, secrets shorter than 32 characters,
-missing `CORS_ORIGIN` in production). It handles `SIGTERM` gracefully (stops accepting requests, closes the database
+missing `APP_URL` or `CORS_ORIGIN` in production). The access-token secret is named `JWT_SECRET` (there is no
+`JWT_ACCESS_SECRET` variable). It handles `SIGTERM` gracefully (stops accepting requests, closes the database
 pool) so Render deploys do not cut requests.
 
 ### Manual services (without the Blueprint)
@@ -112,6 +115,39 @@ pool) so Render deploys do not cut requests.
 | Env vars       | [`backend/.env.example`](../backend/.env.example) with `NODE_ENV=production` | `NODE_ENV`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `APP_URL`, `APP_TIMEZONE`, `SMTP_*` |
 
 `--include=dev` is needed because TypeScript and the Prisma CLI are required at build time while `NODE_ENV=production`.
+
+### PostgreSQL and Prisma migrations
+
+- Render creates the database from `render.yaml` (`legal-db`, PostgreSQL 16) and injects its internal connection string
+  as `DATABASE_URL`. Any PostgreSQL ≥ 14 works (Neon, Supabase, RDS…): set `DATABASE_URL` yourself.
+- Migrations live in `backend/prisma/migrations` and are applied by `npm run start:prod` (`prisma migrate deploy`): it
+  only runs migrations that are not yet applied, never drops data and is safe to run on every start.
+- Never run `prisma migrate reset`, `prisma db push --force-reset` or `npm run db:seed` against production.
+- Check the state from the Render Shell: `npx prisma migrate status`.
+- New schema changes: create the migration locally (`npm run prisma:migrate -- --name <change>`), commit it, deploy.
+- Backups: enable them on the Render database (paid plans include daily backups) and test a restore.
+
+### Document storage (S3-compatible)
+
+Render disks are ephemeral, so production uses `UPLOAD_PROVIDER=s3`. Files are private objects; the API stores only the
+key and streams downloads after checking permissions (no public URL).
+
+| Provider      | `S3_ENDPOINT`                                   | `S3_REGION`          | Credentials (`UPLOAD_API_KEY` / `UPLOAD_API_SECRET`)            |
+| ------------- | ----------------------------------------------- | -------------------- | --------------------------------------------------------------- |
+| Cloudflare R2 | `https://<account-id>.r2.cloudflarestorage.com` | `auto`               | R2 → Manage API tokens → "Object Read & Write" for the bucket   |
+| AWS S3        | empty                                           | bucket region        | IAM user limited to `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on `arn:aws:s3:::<bucket>/*` |
+| Backblaze B2  | `https://s3.<region>.backblazeb2.com`           | e.g. `eu-central-003` | Application key restricted to the bucket                        |
+
+Create a **private** bucket (no public access), then set `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `UPLOAD_API_KEY`,
+`UPLOAD_API_SECRET`. With a custom endpoint the API uses path-style requests. The API refuses to start with
+`UPLOAD_PROVIDER=s3` and a missing bucket or key.
+
+### E-mail (SMTP, optional)
+
+Only password-reset e-mails are sent. Without `SMTP_HOST` no e-mail is sent (and reset links are never logged in
+production). Set `SMTP_HOST`, `SMTP_PORT` (587 STARTTLS, 465 implicit TLS), `SMTP_USER`, `SMTP_PASSWORD` and
+`SMTP_FROM` (a sender verified with your provider, e.g. `"Cabinet <no-reply@yourdomain.com>"`). Any SMTP provider works
+(Brevo, Mailgun, Amazon SES, Postmark, your mail host).
 
 ## 5. First administrator
 
@@ -208,15 +244,38 @@ deletes the database and uploads.
 
 ## 10. Production checklist
 
-- [ ] `NODE_ENV=production`; JWT secrets generated (≥ 32 chars) and never committed.
-- [ ] `CORS_ORIGIN` and `APP_URL` = the real frontend origin; `NEXT_PUBLIC_API_URL` = the real API URL.
-- [ ] Custom domains `app.` / `api.` on the same domain, HTTPS active on both.
-- [ ] `ALLOW_REGISTRATION=false`; first admin created with `npm run admin:create`; production never seeded.
-- [ ] `UPLOAD_PROVIDER=s3` (Render disks are ephemeral), private bucket.
-- [ ] Reminder cron job active (or an alternative from §8).
-- [ ] SMTP configured for password resets.
-- [ ] Render PostgreSQL backups enabled; test a restore.
-- [ ] Production verification (§7) done.
+Repository and quality
+
+- [ ] GitHub repository ready, `main` clean, CI passing (backend, frontend, E2E)
+- [ ] Backend tests, frontend tests and E2E passing locally; Docker stack healthy
+- [ ] Prisma migrations verified (`npx prisma migrate status` up to date)
+
+Configuration
+
+- [ ] Environment variables set (Vercel: `NEXT_PUBLIC_*`; Render: `APP_URL`, `CORS_ORIGIN`, S3, SMTP); none committed
+- [ ] `NODE_ENV=production`; JWT secrets generated by Render (≥ 32 chars)
+- [ ] `ALLOW_REGISTRATION=false`; first admin created with `npm run admin:create`; production never seeded
+- [ ] S3 bucket private and configured (`UPLOAD_PROVIDER=s3`)
+- [ ] SMTP configured (password resets)
+- [ ] Reminder cron job active (or an alternative from §8)
+- [ ] Render PostgreSQL backups enabled; restore tested
+
+Infrastructure
+
+- [ ] Render web service live, `/health` → `{"status":"ok"}`, `/health/ready` → database `ok`
+- [ ] Vercel project live
+- [ ] Domain ready: `app.` → Vercel, `api.` → Render, HTTPS active on both
+- [ ] `CORS_ORIGIN` / `APP_URL` = `https://app.<domain>`, `NEXT_PUBLIC_API_URL` = `https://api.<domain>`
+
+Functional verification in production (§7)
+
+- [ ] Login, refresh after reload, logout
+- [ ] RBAC: assistant sees no finance/admin; lawyer sees only own cases
+- [ ] Clients, cases, hearings CRUD
+- [ ] Documents upload / download / delete
+- [ ] Contracts, invoices (create, send, payment, print)
+- [ ] Notifications and reminders (cron run creates the expected reminder once)
+- [ ] Arabic RTL and French LTR
 
 ## Troubleshooting
 
@@ -226,5 +285,9 @@ deletes the database and uploads.
 | Logged out on every reload                      | Third-party cookie blocked: use the `app.` / `api.` custom domains                   |
 | Frontend calls the wrong API                    | `NEXT_PUBLIC_API_URL` changed without a frontend redeploy                            |
 | API exits on start: `Invalid environment configuration` | A required variable is missing or too short (message lists it)            |
+| API exits on start: `Missing production configuration` | Set `APP_URL` and `CORS_ORIGIN` on the web service                        |
+| Frontend build fails: `NEXT_PUBLIC_API_URL must be set` | Add the variable in Vercel (Production and Preview), redeploy             |
+| Upload returns 500 with S3                       | Wrong endpoint/region/keys, or key without write access to the bucket        |
+| Password-reset e-mail not received              | `SMTP_HOST` empty, wrong port/TLS (587 vs 465) or unverified `SMTP_FROM`     |
 | `/health/ready` returns 503                     | Database unreachable or `DATABASE_URL` wrong                                         |
 | Uploads lost after a deploy                     | `UPLOAD_PROVIDER=local` on Render; switch to `s3`                                    |

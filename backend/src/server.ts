@@ -4,8 +4,11 @@ import { logger } from './config/logger';
 import { prisma } from './config/prisma';
 import { startScheduler } from './jobs/scheduler';
 
-if (env.isProduction && !process.env.CORS_ORIGIN) {
-  throw new Error('CORS_ORIGIN must list the frontend origin(s) in production.');
+if (env.isProduction) {
+  const missing = ['APP_URL', 'CORS_ORIGIN'].filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(`Missing production configuration (frontend URL): ${missing.join(', ')}`);
+  }
 }
 
 const app = createApp();

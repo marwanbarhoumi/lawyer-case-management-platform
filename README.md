@@ -152,7 +152,9 @@ Templates: [`backend/.env.example`](backend/.env.example), [`frontend/.env.examp
 | `NEXT_PUBLIC_APP_TIMEZONE`                | frontend | Same value as `APP_TIMEZONE`                                             |
 | `NEXT_PUBLIC_MAX_UPLOAD_MB`               | frontend | Client-side upload size check (same value as `MAX_UPLOAD_MB`)            |
 
-Production requires `CORS_ORIGIN` (API) and `NEXT_PUBLIC_API_URL` (frontend build): both fail fast when missing.
+Production fails fast when `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `APP_URL` or `CORS_ORIGIN` (API) or
+`NEXT_PUBLIC_API_URL` (frontend build) is missing. Documents need S3 in production (`UPLOAD_PROVIDER=s3`); see
+[docs/deployment.md](docs/deployment.md) for S3, SMTP, PostgreSQL and the first admin account.
 
 ## Scripts
 

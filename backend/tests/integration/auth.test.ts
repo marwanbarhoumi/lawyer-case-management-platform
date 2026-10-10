@@ -130,12 +130,24 @@ describe('Authentication', () => {
 
   it('logs out and invalidates the access token session', async () => {
     const user = await createUser('LAWYER');
-    const { token } = await login(user.email);
+    const { token, cookie } = await login(user.email);
     const auth = { Authorization: `Bearer ${token}` };
-    expect((await request(app).post('/api/auth/logout').set(auth)).status).toBe(200);
+    const logout = await request(app).post('/api/auth/logout').set(auth);
+    expect(logout.status).toBe(200);
+    const cleared = (logout.headers['set-cookie'] as unknown as string[]).find((value) =>
+      value.startsWith('lm_refresh='),
+    );
+    expect(cleared).toMatch(/^lm_refresh=;/);
+    expect(cleared).toContain('Path=/api/auth');
+    expect(cleared).toContain('Expires=Thu, 01 Jan 1970');
+
     const me = await request(app).get('/api/auth/me').set(auth);
     expect(me.status).toBe(401);
     expect(me.body.errorCode).toBe('SESSION_REVOKED');
+    const refresh = await request(app)
+      .post('/api/auth/refresh')
+      .set('Cookie', refreshCookie(cookie) as string);
+    expect(refresh.status).toBe(401);
   });
 
   it('updates profile and password', async () => {

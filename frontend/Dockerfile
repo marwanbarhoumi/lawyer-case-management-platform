@@ -9,7 +9,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 # NEXT_PUBLIC_* values are inlined into the client bundle at build time.
 ARG NEXT_PUBLIC_API_URL=http://localhost:5000
-ARG NEXT_PUBLIC_APP_TIMEZONE=Africa/Casablanca
+ARG NEXT_PUBLIC_APP_TIMEZONE=Africa/Tunis
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_APP_TIMEZONE=$NEXT_PUBLIC_APP_TIMEZONE \
     NEXT_OUTPUT=standalone \

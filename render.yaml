@@ -35,7 +35,7 @@ services:
       - key: CORS_ORIGIN
         sync: false # same value as APP_URL (comma-separated if several)
       - key: APP_TIMEZONE
-        value: Africa/Casablanca
+        value: Africa/Tunis
       - key: ALLOW_REGISTRATION
         value: 'false'
       # Render's filesystem is ephemeral: store documents in S3-compatible storage (e.g. Cloudflare R2).
@@ -58,6 +58,8 @@ services:
         value: 'false'
       - key: SMTP_HOST
         sync: false
+      - key: SMTP_PORT
+        value: '587' # 465 for implicit TLS
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
@@ -99,12 +101,17 @@ services:
           name: legal-api
           envVarKey: APP_URL
       - key: APP_TIMEZONE
-        value: Africa/Casablanca
+        value: Africa/Tunis
       - key: SMTP_HOST
         fromService:
           type: web
           name: legal-api
           envVarKey: SMTP_HOST
+      - key: SMTP_PORT
+        fromService:
+          type: web
+          name: legal-api
+          envVarKey: SMTP_PORT
       - key: SMTP_USER
         fromService:
           type: web
