@@ -49,7 +49,7 @@ jobs:
       - name: Build
         if: steps.config.outputs.enabled == 'true'
         run: |
-          npm ci
+          npm ci --include=dev
           npm run build
       - name: Run reminder job
         if: steps.config.outputs.enabled == 'true'
